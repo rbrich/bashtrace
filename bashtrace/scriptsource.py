@@ -1,5 +1,4 @@
 import curses
-import logging
 
 try:
     from pygments import highlight
@@ -13,7 +12,7 @@ except ImportError:
 from .ansicurses import ColorWin
 
 
-def _color_pair_highlight(fg, bg):
+def _color_pair_command(fg, bg):
     return curses.color_pair(16 + fg if fg is not None else 4)
 
 
@@ -26,7 +25,8 @@ class ScriptSource:
     """View for script's source code, with marker for the part currently
     being run.
 
-    The source syntax is highlighted (if pygments module is available).
+    The source syntax is optionally highlighted depending on availability
+    of pygments module.
 
     """
 
@@ -74,11 +74,10 @@ class ScriptSource:
                 self._cmd_last_line += 1
 
     def update_command_span(self):
-        """Compute part of source to be highlighted as the command to be run.
+        """Compute part of source to be marked as the command being run.
 
         Writes result to self._cmd_(first_line|last_line|first_col|last_col)
-
-        Columns are optional, when both of them are 0, whole line is highlighted.
+        Columns are optional, when both of them are 0, whole line is marked.
 
         In most common case of full line command:
             first_line == last_line
@@ -92,23 +91,22 @@ class ScriptSource:
         # Multi-line statement (escaped line ends)
         self._process_multiline_statement()
         # Check that we are correct (this block is not mandatory)
-        highlighted_lines = []
+        command_lines = []
         for ln in range(self._cmd_first_line, self._cmd_last_line + 1):
             line = self.raw_lines[ln].rstrip('\\').strip()
-            highlighted_lines.append(line)
-        merged_highlighted_lines = ' '.join(highlighted_lines)
+            command_lines.append(line)
+        merged_command_lines = ' '.join(command_lines)
 
-        if len(self.command) < len(merged_highlighted_lines):
-            col = merged_highlighted_lines.index(self.command, self._cmd_col)
+        if len(self.command) < len(merged_command_lines):
+            col = merged_command_lines.index(self.command, self._cmd_col)
             self._cmd_col = col
             pad = 0
-            for line in highlighted_lines:
+            for line in command_lines:
                 if col > len(line):
                     self._cmd_first_line += 1
                     col -= len(line) + 1
                 else:
                     raw_line = self.raw_lines[self._cmd_first_line]
-                    logging.debug("XX %r %r", raw_line, line)
                     pad = raw_line.index(line)
                     break
             self._cmd_first_col = pad + col
@@ -121,7 +119,7 @@ class ScriptSource:
     def draw(self, win, y, max_h, max_w) -> int:
         """Draw part of script source into `win` at `y`.
 
-        Currently executed command (self.command, self.lineno) is highlighted
+        Currently executed command (self.command, self.lineno) is marked
         and the view is centered around that line.
 
         Occupied space is limit by `max_h`, `max_w`.
@@ -163,12 +161,12 @@ class ScriptSource:
             colorwin.addcolorstr(line)
             self._drawn_h += 1
 
-        # Highlight part to be run
+        # Mark the part currently being run
         self.update_command_span()
         colorwin.attrset(curses.color_pair(4))
-        colorwin.color_pair = _color_pair_highlight
+        colorwin.color_pair = _color_pair_command
         if self._cmd_first_col == self._cmd_last_col == 0:
-            # Highlight command, possibly multiple lines,
+            # Mark command, possibly multiple lines,
             # which is about to be executed
             for ln in range(self._cmd_first_line, self._cmd_last_line + 1):
                 if ln > start - 1:
@@ -178,12 +176,12 @@ class ScriptSource:
         else:
             # Special handling for subshells:
             # The line is drawn in normal color,
-            # subshell part is then highlighted
+            # subshell part is then marked as command
             colorwin.move(line_to_y[self._cmd_first_line + 1],
                           4 + self._cmd_first_col)
             colorwin.addstr(self.command)
 
-        # Move the to highlighted line
+        # Move the to marked line
         colorwin.move(line_to_y[self.lineno], 0)
 
         return self._drawn_h

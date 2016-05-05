@@ -194,7 +194,7 @@ class BashTrace:
 
     def prepare_debug(self, script_name, dbg_wr, stp_rd) -> NamedTemporaryFile:
         """Copy script to temp file, adjust, return temp file object."""
-        logging.debug("Using debug script: %s", script_name)
+        logging.info("Using debug script: %s", script_name)
         tmpf = NamedTemporaryFile()
         with open(script_name, 'rb') as f:
             data = f.read()
@@ -271,7 +271,6 @@ class BashTrace:
                     resized = False
                     continue
                 events = poll.poll()
-                logging.info("poll: %r", events)
                 for fd, event in events:
                     if event & select.POLLHUP:
                         poll.unregister(fd)
@@ -306,8 +305,12 @@ class BashTrace:
             trap, data = data.split(' ', 1)
             caller, command, depth, subshell = data.split('!!!')
             lineno, script = caller.split(' ', 1)
-            lineno = int(lineno)
+
+            logging.info("Trap %s %s:%s depth=%s subshell=%s command=%r",
+                         trap, script, lineno, depth, subshell, command)
+
             depth = int(depth)
+            lineno = int(lineno)
             subshell = int(subshell)
             command = command.strip()
 

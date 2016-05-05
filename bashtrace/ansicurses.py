@@ -6,13 +6,11 @@ class ColorWin:
 
     """Wraps curses window, writes colored string into it.
 
-    The only supported method is `addstr`.
-
-    You should override `color_pair` to actual return color pair number
+    You should override `color_pair` to actually return color pair number
     to see any colors.
 
     Only a subset of ANSI codes are interpreted. Non-graphic codes are ignored
-    (those will just appear in the output in verbatim).
+    (those will just appear in verbatim in the output).
     An NotImplementedError is raised when unknown graphic code is encountered.
     (This is meant for controlled input, so unknown codes should be implemented
     if this situation occurs.)
@@ -68,7 +66,7 @@ class ColorWin:
         self._win.attrset(self._attr | self.color_pair(self._fg, self._bg))
 
     def addstr(self, s):
-        """Like curses win.addstr, but call on_wrap() when line overflows.
+        """Like curses' win.addstr, but call on_wrap() when line overflows.
         This allows to add marker on line beginnings."""
         h, w = self._win.getmaxyx()
         y, x = self._win.getyx()

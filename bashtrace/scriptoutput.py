@@ -124,7 +124,6 @@ class ScriptOutput:
 
     def redraw(self):
         """Draw the history into window. Only required after terminal resize."""
-        logging.debug("hist %r", self._history)
         self._win.erase()
         self._win.move(0, 0)
         h, w = self._win.getmaxyx()

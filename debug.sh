@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # This file is preprocessed before run.
-# Following placeholders are replace by appropriate FD number:
+# Following placeholders are replaced by appropriate FD number:
 # __DBG_WR__    Debug pipe, write end.
 # __STP_RD__    Step pipe, read end.
 #
