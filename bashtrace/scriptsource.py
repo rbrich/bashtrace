@@ -1,4 +1,5 @@
 import curses
+import re
 
 try:
     from pygments import highlight
@@ -35,7 +36,7 @@ class ScriptSource:
         self.name = name
         self.depth = depth
         self.lineno = lineno
-        self.command = command
+        self._command = None
         self._subshell = subshell
         self.raw_lines = None
         self.lines = None
@@ -46,6 +47,8 @@ class ScriptSource:
         self._cmd_first_col = 0
         self._cmd_last_col = 0
         self._drawn_h = 0
+        # Invoke setter for command
+        self.command = command
         # Read the script file
         self.load()
 
@@ -66,6 +69,20 @@ class ScriptSource:
         self._subshell = value
         if value == 0:
             self._cmd_col = 0
+
+    @property
+    def command(self):
+        return self._command
+
+    @command.setter
+    def command(self, value):
+        """Preprocess command - eliminate special cases."""
+        # C-style for-loop
+        m = re.match(r'\(\((.*)\)\)$', value)
+        if m:
+            self._command = m.group(1)
+            return
+        self._command = value
 
     def _process_multiline_statement(self):
         """Handle line continuation (\ before NL)"""
