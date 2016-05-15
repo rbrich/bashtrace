@@ -205,6 +205,39 @@ class BashTrace:
         tmpf.file.flush()
         return tmpf
 
+    def run_script_noui(self, script, args, debug_script):
+        """No UI version of :meth:`run_script`."""
+        dbg_rd, dbg_wr = os.pipe()
+        stp_rd, self._stp_wr = os.pipe()
+        temp_debug_script = self.prepare_debug(debug_script, dbg_wr, stp_rd)
+        argv = ['bash', '-c', 'source ' + temp_debug_script.name,
+                script] + list(args)
+
+        self._proc = subprocess.Popen(argv, pass_fds=(dbg_wr, stp_rd))
+
+        poll = select.poll()
+        process_func = {}
+        poll.register(dbg_rd, select.POLLIN)
+        process_func[dbg_rd] = partial(self.proc_debug, dbg_rd)
+
+        def sigchld(signum, stackframe):
+            raise ProgramFinished
+        signal.signal(signal.SIGCHLD, sigchld)
+        while True:
+            try:
+                events = poll.poll()
+                for fd, event in events:
+                    if event & select.POLLHUP:
+                        poll.unregister(fd)
+                        break
+                    else:
+                        process_func[fd]()
+            except ProgramFinished:
+                break
+        status = self._proc.wait()
+        logging.info('Finished (returned %d)' % status)
+        return status
+
     def run_script(self, script, args, debug_script):
         """Run `script` with `args` in debug mode.
 

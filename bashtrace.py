@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
-import curses
 import locale
 import logging
 import os
 
 from bashtrace.program import BashTrace
-
-
-def curses_main(stdscr, bash_trace, args):
-    bash_trace.init_window(stdscr)
-    bash_trace.run_script(args.script, args.args, args.wrapper)
 
 
 def main():
@@ -33,6 +27,9 @@ def main():
                  "If SCRIPT is empty, target is assumed. "
                  "If LINE is empty, first valid line is assumed. "
                  "Use ':' to break immediately.")
+    add_arg('--no-ui', action="store_true",
+            help="Switch off curses interface, do not touch script output. "
+                 "Useful if only the log is wanted.")
     add_arg('--wrapper', metavar="FILENAME", default=debug_script,
             help="Use FILENAME as debug wrapper instead of internal one")
     add_arg('--log', metavar="FILENAME", help="Log file for debug messages")
@@ -47,7 +44,16 @@ def main():
         script_name, line = vars(args)['break'].split(':')
         bash_trace.set_break(script_name, line)
 
-    curses.wrapper(curses_main, bash_trace, args)
+    if args.no_ui:
+        bash_trace.run_script_noui(args.script, args.args, args.wrapper)
+        return
+
+    def curses_main(stdscr):
+        bash_trace.init_window(stdscr)
+        bash_trace.run_script(args.script, args.args, args.wrapper)
+
+    import curses
+    curses.wrapper(curses_main)
 
 
 if __name__ == '__main__':
