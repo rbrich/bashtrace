@@ -1,5 +1,4 @@
 import curses
-import re
 
 try:
     from pygments import highlight
@@ -35,22 +34,28 @@ class ScriptSource:
         # The script data
         self.name = name
         self.depth = depth
-        self.lineno = lineno
-        self._command = None
-        self._subshell = subshell
+        self._lineno = lineno  # Starts at 1
+        self.command = command
+        self.subshell = subshell
         self.raw_lines = None
         self.lines = None
         # View helpers
-        self._cmd_col = 0
-        self._cmd_first_line = 0
-        self._cmd_last_line = 0
-        self._cmd_first_col = 0
-        self._cmd_last_col = 0
+        self._cmd_first_lineno = 0
+        self._cmd_last_lineno = 0
         self._drawn_h = 0
-        # Invoke setter for command
-        self.command = command
         # Read the script file
         self.load()
+
+    @property
+    def lineno(self):
+        return self._lineno
+
+    @lineno.setter
+    def lineno(self, value):
+        if value != self._lineno:
+            self._lineno = value
+            self._cmd_first_lineno = 0
+            self._cmd_last_lineno = 0
 
     def load(self):
         with open(self.name, 'r', encoding="utf-8") as f:
@@ -59,36 +64,6 @@ class ScriptSource:
         self.raw_lines = data.splitlines()
         self.lines = highlight(data, BashLexer(),
                                TerminalFormatter(bg="dark")).splitlines()
-
-    @property
-    def subshell(self):
-        return self._subshell
-
-    @subshell.setter
-    def subshell(self, value):
-        self._subshell = value
-        if value == 0:
-            self._cmd_col = 0
-
-    @property
-    def command(self):
-        return self._command
-
-    @command.setter
-    def command(self, value):
-        """Preprocess command - eliminate special cases."""
-        # C-style for-loop
-        m = re.match(r'\(\((.*)\)\)$', value)
-        if m:
-            self._command = m.group(1)
-            return
-        self._command = value
-
-    def _process_multiline_statement(self):
-        """Handle line continuation (\ before NL)"""
-        while self.raw_lines[self._cmd_last_line].endswith('\\'):
-            if self._cmd_last_line + 1 < len(self.raw_lines):
-                self._cmd_last_line += 1
 
     def update_command_span(self):
         """Compute part of source to be marked as the command being run.
@@ -103,35 +78,18 @@ class ScriptSource:
         Lines are indexed from zero.
 
         """
-        self._cmd_first_line = self._cmd_last_line = self.lineno - 1
-        self._cmd_first_col = self._cmd_last_col = 0
-        # Multi-line statement (escaped line ends)
-        self._process_multiline_statement()
-        # Check that we are correct (this block is not mandatory)
-        command_lines = []
-        for ln in range(self._cmd_first_line, self._cmd_last_line + 1):
-            line = self.raw_lines[ln].rstrip('\\').strip()
-            command_lines.append(line)
-        merged_command_lines = ' '.join(command_lines)
+        if self._cmd_first_lineno != 0:
+            return
 
-        if len(self.command) < len(merged_command_lines):
-            col = merged_command_lines.index(self.command, self._cmd_col)
-            self._cmd_col = col
-            pad = 0
-            for line in command_lines:
-                if col > len(line):
-                    self._cmd_first_line += 1
-                    col -= len(line) + 1
-                else:
-                    raw_line = self.raw_lines[self._cmd_first_line]
-                    pad = raw_line.index(line)
-                    break
-            self._cmd_first_col = pad + col
-            self._cmd_last_col = self._cmd_first_col + len(self.command)
-        else:
-            assert self.subshell == 0
-            # Multi-line command - the last line is reported, expand backwards
-            self._cmd_first_line -= self.command.count('\n')
+        self._cmd_first_lineno = self._cmd_last_lineno = self.lineno
+
+        # Multi-line statement (escaped line ends - \ before NL)
+        while self.raw_lines[self._cmd_last_lineno - 1].endswith('\\'):
+            if self._cmd_last_lineno < len(self.raw_lines):
+                self._cmd_last_lineno += 1
+
+        # Multi-line command - the last line is reported, expand backwards
+        self._cmd_first_lineno -= self.command.count('\n')
 
     def draw(self, win, y, max_h, max_w) -> int:
         """Draw part of script source into `win` at `y`.
@@ -139,7 +97,7 @@ class ScriptSource:
         Currently executed command (self.command, self.lineno) is marked
         and the view is centered around that line.
 
-        Occupied space is limit by `max_h`, `max_w`.
+        Occupied space is limited by `max_h`, `max_w`.
 
         Returns number of lines actually drawn.
         This will be less or equal to `max_h`.
@@ -178,27 +136,39 @@ class ScriptSource:
             colorwin.addcolorstr(line)
             self._drawn_h += 1
 
-        # Mark the part currently being run
+        # Mark lines currently being run
         self.update_command_span()
         colorwin.attrset(curses.color_pair(4))
         colorwin.color_pair = _color_pair_command
-        if self._cmd_first_col == self._cmd_last_col == 0:
-            # Mark command, possibly multiple lines,
-            # which is about to be executed
-            for ln in range(self._cmd_first_line, self._cmd_last_line + 1):
-                if ln > start - 1:
-                    colorwin.move(line_to_y[ln + 1], 0)
-                    colorwin.addstr("%2s  " % (ln + 1))
-                    colorwin.addcolorstr(self.lines[ln])
-        else:
-            # Special handling for subshells:
-            # The line is drawn in normal color,
-            # subshell part is then marked as command
-            colorwin.move(line_to_y[self._cmd_first_line + 1],
-                          4 + self._cmd_first_col)
+        for ln in range(self._cmd_first_lineno, self._cmd_last_lineno + 1):
+            if ln > start:
+                colorwin.move(line_to_y[ln], 0)
+                colorwin.addstr("%2s  " % ln)
+                colorwin.addcolorstr(self.lines[ln - 1])
+
+        # Mark/show the command if different from marked lines
+        marked_lines = '\n'.join(self.raw_lines[self._cmd_first_lineno - 1:
+                                                self._cmd_last_lineno])
+        if self.command.strip() != marked_lines.strip():
+            # If there is one exact match of command in marked lines,
+            # highlight it at the position
+            if marked_lines.count(self.command) == 1:
+                pos = marked_lines.index(self.command)
+                prefix = marked_lines[:pos]
+                cmd_lineno = self._cmd_first_lineno
+                cmd_col = len(prefix)
+                if '\n' in prefix:
+                    cmd_lineno += prefix.count('\n')
+                    cmd_col -= prefix.rindex('\n') + 1
+                colorwin.move(line_to_y[cmd_lineno], 4 + cmd_col)
+            # Otherwise, do not try to guess which part is actually running,
+            # instead print the reported command above marked lines
+            else:
+                colorwin.move(line_to_y[self._cmd_first_lineno] - 1, 4)
+            colorwin.attrset(curses.color_pair(5) | curses.A_BOLD)
             colorwin.addstr(self.command)
 
-        # Move the to marked line
+        # Move the line reported by Bash
         colorwin.move(line_to_y[self.lineno], 0)
 
         return self._drawn_h

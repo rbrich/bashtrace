@@ -71,7 +71,7 @@ class ColorWin:
         h, w = self._win.getmaxyx()
         y, x = self._win.getyx()
         space = w - x
-        if space < len(s):
+        if space <= len(s):
             self._win.addstr(s[:space])
             self.on_wrap()
             self.addstr(s[space:])

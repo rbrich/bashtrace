@@ -89,6 +89,7 @@ class BashTrace:
         curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLUE)
         curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)
         curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+        curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_MAGENTA)
 
         for i in range(8):
             fg = curses.COLOR_BLACK + i
